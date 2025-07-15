@@ -1,17 +1,14 @@
-// popup.js - Main popup UI logic with enhanced error handling
+// popup.js - Simplified version without chart complications
 
 class DataWireUI {
   constructor() {
-    this.chart = null;
-    this.lastUpdateTime = 0;
-    this.speedCalculation = {
-      upload: { lastBytes: 0, lastTime: 0 },
-      download: { lastBytes: 0, lastTime: 0 }
+    this.speedHistory = {
+      upload: [],
+      download: []
     };
-    this.initializationRetries = 0;
-    this.maxRetries = 3;
+    this.maxHistoryPoints = 30; // Keep 30 seconds of speed data
     
-    console.log('DataWireUI: Starting initialization...');
+    console.log('DataWireUI: Starting simple initialization...');
     this.init();
   }
 
@@ -20,11 +17,11 @@ class DataWireUI {
       console.log('DataWireUI: Loading initial data...');
       await this.loadInitialData();
       
-      console.log('DataWireUI: Setting up chart...');
-      await this.setupChart();
-      
       console.log('DataWireUI: Setting up event listeners...');
       this.setupEventListeners();
+      
+      console.log('DataWireUI: Setting up speed visualization...');
+      this.setupSpeedVisualization();
       
       console.log('DataWireUI: Starting periodic updates...');
       this.startPeriodicUpdates();
@@ -33,30 +30,28 @@ class DataWireUI {
       document.getElementById('loading').style.display = 'none';
       document.getElementById('main-content').style.display = 'block';
       
-      console.log('DataWireUI: Initialization complete');
+      console.log('DataWireUI: Simple initialization complete');
     } catch (error) {
       console.error('DataWireUI: Initialization failed:', error);
-      
-      // Retry initialization up to maxRetries times
-      if (this.initializationRetries < this.maxRetries) {
-        this.initializationRetries++;
-        console.log(`DataWireUI: Retrying initialization (${this.initializationRetries}/${this.maxRetries})...`);
-        setTimeout(() => this.init(), 1000 * this.initializationRetries);
-        return;
-      }
-      
-      // Show error message in loading area
-      const loadingEl = document.getElementById('loading');
-      if (loadingEl) {
-        loadingEl.innerHTML = `
-          <div style="color: #ff6b6b; text-align: center;">
-            <div>Error loading extension</div>
-            <div style="font-size: 10px; margin-top: 8px;">Check console for details</div>
-            <button onclick="location.reload()" style="margin-top: 8px; padding: 4px 8px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer;">Retry</button>
-          </div>
-        `;
-      }
+      this.showFallbackUI();
     }
+  }
+
+  showFallbackUI() {
+    // Show content even if initialization failed
+    const loadingEl = document.getElementById('loading');
+    const mainContent = document.getElementById('main-content');
+    
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (mainContent) mainContent.style.display = 'block';
+    
+    // Set basic values
+    this.updateElement('session-total', '0 B');
+    this.updateElement('today-total', '0 B');
+    this.updateElement('upload-speed', '0 B/s');
+    this.updateElement('download-speed', '0 B/s');
+    
+    console.log('DataWireUI: Fallback UI shown');
   }
 
   async loadInitialData() {
@@ -68,8 +63,7 @@ class DataWireUI {
       if (response && typeof response === 'object') {
         this.updateUI(response);
       } else {
-        console.warn('DataWireUI: Invalid response received from background:', response);
-        // Initialize with empty data
+        console.warn('DataWireUI: Invalid response, using default data');
         this.updateUI({
           currentSession: { upload: 0, download: 0, startTime: Date.now() },
           dailyUsage: {},
@@ -80,238 +74,233 @@ class DataWireUI {
       }
     } catch (error) {
       console.error('DataWireUI: Error loading initial data:', error);
-      throw error;
+      this.showFallbackUI();
     }
   }
 
-  async setupChart() {
-    return new Promise((resolve, reject) => {
-      try {
-        const canvas = document.getElementById('realtimeChart');
-        if (!canvas) {
-          console.error('DataWireUI: Chart canvas not found');
-          reject(new Error('Chart canvas not found'));
-          return;
-        }
-        
-        // Wait for canvas to be properly sized
-        setTimeout(() => {
-          try {
-            const ctx = canvas.getContext('2d');
-            if (!ctx) {
-              console.error('DataWireUI: Cannot get 2D context from canvas');
-              reject(new Error('Cannot get 2D context'));
-              return;
-            }
-            
-            // Ensure canvas has valid dimensions
-            const rect = canvas.getBoundingClientRect();
-            const width = Math.max(rect.width || 300, 100);
-            const height = Math.max(rect.height || 80, 50);
-            
-            // Set canvas size
-            canvas.width = width * 2; // For retina displays
-            canvas.height = height * 2;
-            ctx.scale(2, 2);
-            
-            this.chart = {
-              canvas: canvas,
-              ctx: ctx,
-              width: width,
-              height: height,
-              data: {
-                upload: new Array(60).fill(0), // 60 seconds of data
-                download: new Array(60).fill(0)
-              },
-              isInitialized: true
-            };
-            
-            console.log('DataWireUI: Chart setup complete, dimensions:', width, 'x', height);
-            this.drawChart();
-            resolve();
-          } catch (error) {
-            console.error('DataWireUI: Error setting up chart context:', error);
-            reject(error);
-          }
-        }, 100);
-      } catch (error) {
-        console.error('DataWireUI: Error in setupChart:', error);
-        reject(error);
-      }
-    });
+  setupSpeedVisualization() {
+    // Replace the chart container with a simple speed visualization
+    const chartContainer = document.querySelector('.chart-container');
+    if (chartContainer) {
+      chartContainer.innerHTML = `
+        <div class="speed-visualization">
+          <div class="speed-bars">
+            <div class="speed-bar-group">
+              <div class="speed-bar-label">Upload</div>
+              <div class="speed-bar upload-bar">
+                <div class="speed-bar-fill" id="upload-bar-fill"></div>
+              </div>
+              <div class="speed-bar-value" id="upload-current">0 B/s</div>
+            </div>
+            <div class="speed-bar-group">
+              <div class="speed-bar-label">Download</div>
+              <div class="speed-bar download-bar">
+                <div class="speed-bar-fill" id="download-bar-fill"></div>
+              </div>
+              <div class="speed-bar-value" id="download-current">0 B/s</div>
+            </div>
+          </div>
+          <div class="speed-history">
+            <div class="speed-history-label">Last 30 seconds</div>
+            <div class="speed-dots" id="speed-dots-container"></div>
+          </div>
+        </div>
+      `;
+      
+      // Add CSS for the visualization
+      this.addSpeedVisualizationCSS();
+    }
   }
 
-  drawChart() {
-    if (!this.chart || !this.chart.isInitialized) {
-      console.warn('DataWireUI: Chart not initialized for drawing');
-      return;
-    }
-    
-    try {
-      const { ctx, width, height, data } = this.chart;
-      
-      // Clear canvas
-      ctx.clearRect(0, 0, width, height);
-      
-      // Find max value for scaling
-      const maxUpload = Math.max(...data.upload);
-      const maxDownload = Math.max(...data.download);
-      const maxValue = Math.max(maxUpload, maxDownload, 1000); // Minimum 1KB scale
-      
-      // Draw grid
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-      ctx.lineWidth = 1;
-      
-      // Horizontal grid lines
-      for (let i = 0; i <= 4; i++) {
-        const y = (height / 4) * i;
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-        ctx.stroke();
+  addSpeedVisualizationCSS() {
+    const style = document.createElement('style');
+    style.textContent = `
+      .speed-visualization {
+        height: 100%;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
       }
       
-      // Vertical grid lines
-      for (let i = 0; i <= 6; i++) {
-        const x = (width / 6) * i;
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-        ctx.stroke();
+      .speed-bars {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        justify-content: center;
       }
       
-      // Draw upload line (red)
-      this.drawLine(data.upload, maxValue, '#ff6b6b', 2);
-      
-      // Draw download line (teal)
-      this.drawLine(data.download, maxValue, '#4ecdc4', 2);
-      
-      // Draw legend
-      this.drawLegend();
-    } catch (error) {
-      console.error('DataWireUI: Error drawing chart:', error);
-    }
-  }
-
-  drawLine(dataArray, maxValue, color, lineWidth) {
-    if (!this.chart || !this.chart.isInitialized) {
-      return;
-    }
-    
-    const { ctx, width, height } = this.chart;
-    
-    // Validate inputs
-    if (!dataArray || dataArray.length === 0 || !maxValue || maxValue <= 0) {
-      return;
-    }
-    
-    try {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = lineWidth;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      
-      ctx.beginPath();
-      
-      for (let i = 0; i < dataArray.length; i++) {
-        const x = (width / Math.max(dataArray.length - 1, 1)) * i;
-        const y = Math.max(0, height - Math.min((dataArray[i] / maxValue) * height, height));
-        
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
+      .speed-bar-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
       
-      ctx.stroke();
+      .speed-bar-label {
+        font-size: 10px;
+        width: 50px;
+        color: rgba(255, 255, 255, 0.8);
+        font-weight: 500;
+      }
       
-      // Fill area under curve
-      ctx.globalAlpha = 0.1;
-      ctx.fillStyle = color;
-      ctx.lineTo(width, height);
-      ctx.lineTo(0, height);
-      ctx.closePath();
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    } catch (error) {
-      console.error('DataWireUI: Error drawing line:', error);
-    }
+      .speed-bar {
+        flex: 1;
+        height: 12px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        overflow: hidden;
+        position: relative;
+      }
+      
+      .speed-bar-fill {
+        height: 100%;
+        border-radius: 6px;
+        transition: width 0.3s ease;
+        width: 0%;
+      }
+      
+      .upload-bar .speed-bar-fill {
+        background: linear-gradient(90deg, #ff6b6b, #ff8e8e);
+      }
+      
+      .download-bar .speed-bar-fill {
+        background: linear-gradient(90deg, #4ecdc4, #81e6d9);
+      }
+      
+      .speed-bar-value {
+        font-size: 10px;
+        width: 60px;
+        text-align: right;
+        color: rgba(255, 255, 255, 0.9);
+        font-weight: 600;
+      }
+      
+      .speed-history {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      
+      .speed-history-label {
+        font-size: 9px;
+        color: rgba(255, 255, 255, 0.6);
+        text-align: center;
+      }
+      
+      .speed-dots {
+        display: flex;
+        gap: 1px;
+        height: 16px;
+        align-items: end;
+        justify-content: center;
+      }
+      
+      .speed-dot {
+        width: 3px;
+        background: rgba(78, 205, 196, 0.3);
+        border-radius: 1px;
+        transition: all 0.3s ease;
+        min-height: 2px;
+      }
+      
+      .speed-dot.active {
+        background: #4ecdc4;
+      }
+      
+      .speed-dot.high {
+        background: #81e6d9;
+      }
+    `;
+    document.head.appendChild(style);
   }
 
-  drawLegend() {
-    if (!this.chart || !this.chart.isInitialized) {
-      return;
+  updateSpeedVisualization(uploadSpeed, downloadSpeed) {
+    // Update speed bars
+    const uploadBarFill = document.getElementById('upload-bar-fill');
+    const downloadBarFill = document.getElementById('download-bar-fill');
+    const uploadCurrent = document.getElementById('upload-current');
+    const downloadCurrent = document.getElementById('download-current');
+    
+    if (uploadCurrent) uploadCurrent.textContent = this.formatBytes(uploadSpeed) + '/s';
+    if (downloadCurrent) downloadCurrent.textContent = this.formatBytes(downloadSpeed) + '/s';
+    
+    // Calculate percentages (max 10MB/s for scaling)
+    const maxSpeed = 10 * 1024 * 1024; // 10MB/s
+    const uploadPercent = Math.min((uploadSpeed / maxSpeed) * 100, 100);
+    const downloadPercent = Math.min((downloadSpeed / maxSpeed) * 100, 100);
+    
+    if (uploadBarFill) uploadBarFill.style.width = uploadPercent + '%';
+    if (downloadBarFill) downloadBarFill.style.width = downloadPercent + '%';
+    
+    // Update speed history
+    this.speedHistory.upload.push(uploadSpeed);
+    this.speedHistory.download.push(downloadSpeed);
+    
+    // Keep only last 30 points
+    if (this.speedHistory.upload.length > this.maxHistoryPoints) {
+      this.speedHistory.upload.shift();
+      this.speedHistory.download.shift();
     }
     
-    try {
-      const { ctx } = this.chart;
-      
-      ctx.font = '9px Inter, sans-serif';
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-      
-      // Upload legend
-      ctx.fillStyle = '#ff6b6b';
-      ctx.fillRect(5, 5, 8, 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-      ctx.fillText('Upload', 18, 11);
-      
-      // Download legend
-      ctx.fillStyle = '#4ecdc4';
-      ctx.fillRect(5, 18, 8, 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-      ctx.fillText('Download', 18, 24);
-    } catch (error) {
-      console.error('DataWireUI: Error drawing legend:', error);
-    }
+    // Update speed dots
+    this.updateSpeedDots();
   }
 
-  updateChart(realtimeData) {
-    if (!this.chart || !this.chart.isInitialized) {
-      console.warn('DataWireUI: Chart not initialized, skipping update');
-      return;
+  updateSpeedDots() {
+    const dotsContainer = document.getElementById('speed-dots-container');
+    if (!dotsContainer) return;
+    
+    // Calculate max speed for scaling
+    const allSpeeds = [...this.speedHistory.upload, ...this.speedHistory.download];
+    const maxSpeed = Math.max(...allSpeeds, 1024); // At least 1KB for scaling
+    
+    // Create dots for combined activity
+    const dots = [];
+    for (let i = 0; i < this.maxHistoryPoints; i++) {
+      const uploadSpeed = this.speedHistory.upload[i] || 0;
+      const downloadSpeed = this.speedHistory.download[i] || 0;
+      const totalSpeed = uploadSpeed + downloadSpeed;
+      
+      const height = Math.max((totalSpeed / maxSpeed) * 14, 2); // 2px minimum, 14px max
+      const isActive = totalSpeed > 0;
+      const isHigh = totalSpeed > maxSpeed * 0.7;
+      
+      dots.push(`
+        <div class="speed-dot ${isActive ? 'active' : ''} ${isHigh ? 'high' : ''}" 
+             style="height: ${height}px;" 
+             title="${this.formatBytes(totalSpeed)}/s"></div>
+      `);
     }
     
-    if (!realtimeData || !Array.isArray(realtimeData)) {
-      console.warn('DataWireUI: Invalid realtime data, using empty array');
-      realtimeData = [];
-    }
+    dotsContainer.innerHTML = dots.join('');
+  }
+
+  updateCurrentSpeeds(realtimeData) {
+    let uploadSpeed = 0;
+    let downloadSpeed = 0;
     
-    console.log('DataWireUI: Updating chart with', realtimeData.length, 'data points');
-    
-    try {
+    if (realtimeData && Array.isArray(realtimeData)) {
       const now = Date.now();
       const oneSecondAgo = now - 1000;
       
-      // Calculate bytes in last second for each type
-      const uploadLastSecond = realtimeData
+      uploadSpeed = realtimeData
         .filter(d => d && d.timestamp > oneSecondAgo && d.type === 'upload')
         .reduce((sum, d) => sum + (d.bytes || 0), 0);
       
-      const downloadLastSecond = realtimeData
+      downloadSpeed = realtimeData
         .filter(d => d && d.timestamp > oneSecondAgo && d.type === 'download')
         .reduce((sum, d) => sum + (d.bytes || 0), 0);
-      
-      // Shift array and add new data
-      this.chart.data.upload.shift();
-      this.chart.data.upload.push(uploadLastSecond);
-      
-      this.chart.data.download.shift();
-      this.chart.data.download.push(downloadLastSecond);
-      
-      this.drawChart();
-      
-      // Update speed indicators
-      const uploadEl = document.getElementById('upload-speed');
-      const downloadEl = document.getElementById('download-speed');
-      
-      if (uploadEl) uploadEl.textContent = this.formatBytes(uploadLastSecond) + '/s';
-      if (downloadEl) downloadEl.textContent = this.formatBytes(downloadLastSecond) + '/s';
-      
-      console.log('DataWireUI: Current speeds - Upload:', this.formatBytes(uploadLastSecond) + '/s', 'Download:', this.formatBytes(downloadLastSecond) + '/s');
-    } catch (error) {
-      console.error('DataWireUI: Error updating chart:', error);
     }
+    
+    // Update main speed indicators
+    this.updateElement('upload-speed', this.formatBytes(uploadSpeed) + '/s');
+    this.updateElement('download-speed', this.formatBytes(downloadSpeed) + '/s');
+    
+    // Update visualization
+    this.updateSpeedVisualization(uploadSpeed, downloadSpeed);
+    
+    console.log(`DataWireUI: Speeds - Upload: ${this.formatBytes(uploadSpeed)}/s, Download: ${this.formatBytes(downloadSpeed)}/s`);
   }
 
   updateUI(data) {
@@ -333,44 +322,35 @@ class DataWireUI {
       
       // Update session stats
       if (currentSession) {
-        const sessionTotal = currentSession.upload + currentSession.download;
-        const sessionTotalEl = document.getElementById('session-total');
-        const sessionStartEl = document.getElementById('session-start');
-        
-        if (sessionTotalEl) sessionTotalEl.textContent = this.formatBytes(sessionTotal);
-        if (sessionStartEl) sessionStartEl.textContent = new Date(currentSession.startTime).toLocaleTimeString();
+        const sessionTotal = (currentSession.upload || 0) + (currentSession.download || 0);
+        this.updateElement('session-total', this.formatBytes(sessionTotal));
+        this.updateElement('session-start', new Date(currentSession.startTime).toLocaleTimeString());
       }
       
       // Update today's stats
-      const todayTotal = todayData.upload + todayData.download;
-      const todayTotalEl = document.getElementById('today-total');
-      const todayUploadEl = document.getElementById('today-upload');
-      const todayDownloadEl = document.getElementById('today-download');
+      const todayTotal = (todayData.upload || 0) + (todayData.download || 0);
+      this.updateElement('today-total', this.formatBytes(todayTotal));
+      this.updateElement('today-upload', this.formatBytes(todayData.upload || 0));
+      this.updateElement('today-download', this.formatBytes(todayData.download || 0));
       
-      if (todayTotalEl) todayTotalEl.textContent = this.formatBytes(todayTotal);
-      if (todayUploadEl) todayUploadEl.textContent = this.formatBytes(todayData.upload);
-      if (todayDownloadEl) todayDownloadEl.textContent = this.formatBytes(todayData.download);
-      
-      // Update chart
-      this.updateChart(realtimeData);
+      // Update current speeds (this replaces the chart)
+      this.updateCurrentSpeeds(realtimeData);
       
       // Update top sites
       if (siteUsage) {
         this.updateTopSites(siteUsage);
       }
+      
+      // Show that the extension is working
+      const statusDot = document.querySelector('.status-dot');
+      if (statusDot) {
+        statusDot.style.background = '#4ecdc4';
+        statusDot.style.animation = 'pulse 2s infinite';
+      }
+      
     } catch (error) {
       console.error('DataWireUI: Error updating UI:', error);
     }
-  }
-
-  // Get favicon URL for a domain with beautiful fallbacks
-  getFaviconUrl(domain) {
-    if (!domain || domain === 'unknown') {
-      return 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23333" rx="3"/><text x="8" y="11" text-anchor="middle" fill="%23fff" font-size="8" font-family="Inter">?</text></svg>';
-    }
-    
-    // Use Google's favicon service
-    return `https://www.google.com/s2/favicons?domain=${domain}&sz=16`;
   }
 
   updateTopSites(siteUsage) {
@@ -398,11 +378,8 @@ class DataWireUI {
       if (sortedSites.length === 0) {
         topSitesContainer.innerHTML = `
           <div class="site-item">
-            <div class="site-name" style="display: flex; align-items: center; opacity: 0.6;">
-              <div class="site-icon" style="background: #333;">
-                <div class="icon-letter">?</div>
-              </div>
-              <span>No data yet</span>
+            <div class="site-name" style="opacity: 0.6;">
+              <span>No sites tracked yet</span>
             </div>
             <div class="site-usage">0 B</div>
           </div>
@@ -417,8 +394,8 @@ class DataWireUI {
         return `
           <div class="site-item">
             <div class="site-name" title="${site.domain}">
-              <div class="site-icon" data-domain="${mainDomain}">
-                <div class="icon-letter">${firstLetter}</div>
+              <div class="site-icon" style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; width: 16px; height: 16px; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; margin-right: 8px;">
+                ${firstLetter}
               </div>
               <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${mainDomain}</span>
             </div>
@@ -427,8 +404,6 @@ class DataWireUI {
         `;
       }).join('');
       
-      // Load real favicons after DOM is updated
-      this.loadRealFavicons();
     } catch (error) {
       console.error('DataWireUI: Error updating top sites:', error);
     }
@@ -471,69 +446,6 @@ class DataWireUI {
       console.error('DataWireUI: Error parsing domain:', domain, error);
       return domain || 'unknown';
     }
-  }
-
-  loadRealFavicons() {
-    try {
-      const siteIcons = document.querySelectorAll('.site-icon[data-domain]');
-      
-      siteIcons.forEach(iconDiv => {
-        const domain = iconDiv.dataset.domain;
-        if (!domain || domain === 'unknown') return;
-        
-        // Create favicon image
-        const img = document.createElement('img');
-        img.style.width = '16px';
-        img.style.height = '16px';
-        img.style.borderRadius = '3px';
-        img.style.display = 'block';
-        
-        // If favicon loads successfully, replace the letter
-        img.onload = function() {
-          if (this.naturalWidth > 0 && this.naturalHeight > 0) {
-            iconDiv.innerHTML = '';
-            iconDiv.appendChild(this);
-            iconDiv.style.background = 'transparent';
-          }
-        };
-        
-        // If favicon fails, keep the letter
-        img.onerror = function() {
-          console.log(`Favicon failed for ${domain}, keeping letter fallback`);
-        };
-        
-        // Try multiple favicon sources
-        const faviconUrls = [
-          `https://www.google.com/s2/favicons?domain=${domain}&sz=16`,
-          `https://favicon.yandex.net/favicon/${domain}`,
-          `https://${domain}/favicon.ico`,
-          `https://www.${domain}/favicon.ico`
-        ];
-        
-        this.tryFaviconUrls(img, faviconUrls, 0);
-      });
-    } catch (error) {
-      console.error('DataWireUI: Error loading favicons:', error);
-    }
-  }
-
-  tryFaviconUrls(img, urls, index) {
-    if (index >= urls.length) return; // All URLs failed, keep letter
-    
-    const originalOnError = img.onerror;
-    
-    img.onerror = () => {
-      // Try next URL
-      if (index + 1 < urls.length) {
-        this.tryFaviconUrls(img, urls, index + 1);
-      } else {
-        // All URLs failed, restore original error handler
-        img.onerror = originalOnError;
-        if (originalOnError) originalOnError();
-      }
-    };
-    
-    img.src = urls[index];
   }
 
   setupEventListeners() {
@@ -589,7 +501,7 @@ class DataWireUI {
 
   startPeriodicUpdates() {
     try {
-      // Update every 2 seconds for more responsive UI
+      // Update every 1 second for responsive speed monitoring
       setInterval(async () => {
         try {
           const response = await this.sendMessage({ action: 'getUsageData' });
@@ -599,10 +511,20 @@ class DataWireUI {
         } catch (error) {
           console.error('DataWireUI: Error updating data:', error);
         }
-      }, 2000);
-      console.log('DataWireUI: Periodic updates started');
+      }, 1000); // 1 second updates for real-time feel
+      
+      console.log('DataWireUI: Periodic updates started (1 second interval)');
     } catch (error) {
       console.error('DataWireUI: Error starting periodic updates:', error);
+    }
+  }
+
+  updateElement(id, value) {
+    const element = document.getElementById(id);
+    if (element) {
+      element.textContent = value;
+    } else {
+      console.warn('DataWireUI: Element not found:', id);
     }
   }
 
@@ -643,7 +565,7 @@ class DataWireUI {
 
 // Initialize the UI when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('DataWireUI: DOM loaded, initializing...');
+  console.log('DataWireUI: DOM loaded, initializing simple version...');
   try {
     new DataWireUI();
   } catch (error) {
